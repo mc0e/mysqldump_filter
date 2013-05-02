@@ -1,0 +1,117 @@
+#!/usr/bin/env perl
+
+=head1 NAME
+
+mysqldump_filter - filter mysqldump output based on command options
+
+=head1 USAGE
+
+    mysqldump_filter --exclude=table1[,table2,table3]
+    mysqldump_filter --exclude_data=table1[,table2,table3]
+    mysqldump_filter --include=table1[,table2,table3]
+    mysqldump_filter --include_data=table1[,table2,table3]
+    mysqldump_filter --include_structure=table1[,table2,table3]
+    mysqldump_filter --definer_current
+
+text read on stdin is filtered and printed to stdout
+
+multiple --include* options can be combined, as can multiple --exclude* options.
+
+--include* options and --exclude* options cannot be combined with each other
+
+--definer_current will change the DEFINER of any views to CURRENT_USER, and
+can be combined with --include and --exclude options
+
+=cut
+
+use feature "switch";
+use strict;
+
+use Getopt::Long;
+use Data::Dumper;
+
+my $exclude;
+my $exclude_data;
+
+my ($include,$include_structure,$include_data);
+
+my $definer_current;
+my $verbose;
+
+my $result = GetOptions ("exclude=s" => \$exclude,
+                      "exclude_data=s" => \$exclude_data,
+                      "include=s" => \$include,
+                      "include_structure=s" => \$include_structure,
+                      "include_data=s" => \$include_data,
+                      "definer_current=s" => \$definer_current,
+                      "verbose"  => \$verbose);
+
+die unless $result;
+
+my $exclude_opts = ($exclude || $exclude_data);
+my $include_opts = ($include || $include_data || $include_structure);
+if ($exclude_opts && $include_opts) {
+    die "FATAL ERROR: --exclude* options and --include* options are not compatible";
+}
+
+
+foreach my $opt ($exclude,$exclude_data,$include,$include_structure,$include_data) {
+    $opt = { map {$_=>1} split /,/, $opt };
+}
+
+# print Dumper $exclude, $exclude_data; exit;
+
+
+my $state = 'header';
+my $table;
+my $print_flag = 1;
+my $section_type = 'header';
+while (my $line = <>) {
+    if ($line =~ /^--/ ){
+        for ($line) {
+            when (/^--$/) { next;}
+            when (/^-- Table structure for table `(?<table>[^`]+?)`$/) {
+                $section_type = 'table structure';
+                $table = $+{'table'};
+                if($exclude_opts) {
+                    $print_flag = not $exclude->{$table};
+                }
+                if($include_opts) {
+                    $print_flag = $include->{$table} || $include_structure->{$table}
+                }
+
+                if ($print_flag == 0) {
+                    $line =~ s/^-- /-- REMOVED /;
+                }
+            }
+            when (/^-- Dumping data for table `(?<table>[^`]+?)`$/) {
+                $table = $+{'table'};
+                $section_type = 'data';
+                if($exclude_opts) {
+                    $print_flag = not $exclude->{$table}
+                                  and not $exclude_data->{$table};
+                }
+                if($include_opts) {
+                    $print_flag = $include->{$table} || $include_data->{$table}
+                }
+
+                if ($print_flag == 0) {
+                    $line =~ s/^-- /-- REMOVED /;
+                }
+            }
+        }
+        print $line;
+    }
+    elsif (! $print_flag) {
+        next;
+    }
+    elsif($section_type == 'table structure') {
+        if($definer_current) {
+            $line =~ s/DEFINER=`[^`]+`\@`[^`]+`/DEFINER=CURRENT_USER/;
+        }
+        print $line;
+    }
+    elsif($section_type == 'data') {
+        print $line;
+    }
+}
