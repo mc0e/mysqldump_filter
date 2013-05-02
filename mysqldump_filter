@@ -6,11 +6,11 @@ mysqldump_filter - filter mysqldump output based on command options
 
 =head1 USAGE
 
-    mysqldump_filter --exclude=table1[,table2,table3]
-    mysqldump_filter --exclude_data=table1[,table2,table3]
-    mysqldump_filter --include=table1[,table2,table3]
-    mysqldump_filter --include_data=table1[,table2,table3]
-    mysqldump_filter --include_structure=table1[,table2,table3]
+    mysqldump_filter --exclude=table1[,table2[,...]]
+    mysqldump_filter --exclude_data=table1[,table2[,...]]
+    mysqldump_filter --include=table1[,table2[,...]]
+    mysqldump_filter --include_data=table1[,table2[,...]]
+    mysqldump_filter --include_structure=table1[,table2[,...]]
     mysqldump_filter --definer_current
 
 text read on stdin is filtered and printed to stdout
